@@ -19,6 +19,8 @@ public class UserRequest {
     @NotBlank(message = "Email is required")
     private String email;
 
+    private String id_student;
+
     @Size(min = 8, message = "Password must be at least 8 characters long")
     private String password;
 

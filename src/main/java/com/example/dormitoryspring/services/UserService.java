@@ -1,9 +1,14 @@
 package com.example.dormitoryspring.services;
 
+import com.example.dormitoryspring.dto.request.OnlyUpdateUserRequest;
 import com.example.dormitoryspring.dto.request.UserRequest;
 import com.example.dormitoryspring.dto.response.UserResponse;
+import com.example.dormitoryspring.entity.Student;
 import com.example.dormitoryspring.entity.User;
 import com.example.dormitoryspring.enums.Role;
+import com.example.dormitoryspring.exception.AppException;
+import com.example.dormitoryspring.exception.ErrorCode;
+import com.example.dormitoryspring.repositories.StudentRepository;
 import com.example.dormitoryspring.repositories.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +25,9 @@ public class UserService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private StudentRepository studentRepository;
 
 
     public List<UserResponse> getAllUsers() {
@@ -50,7 +58,7 @@ public class UserService {
                 .firstName(userRequest.getFirstName())
                 .lastName(userRequest.getLastName())
                 .email(userRequest.getEmail())
-                .password(userRequest.getPassword())  // You might want to encode the password here
+                .password(userRequest.getPassword())
                 .role(userRequest.getRole() != null ? userRequest.getRole() : Role.USER)
                 .build();
 
@@ -61,8 +69,8 @@ public class UserService {
 
     // Update user
     @Transactional
-    public UserResponse updateUser(Integer id, UserRequest updatedUser) {
-        Optional<User> userOpt = userRepository.findById(id);
+    public UserResponse updateUser(UserRequest updatedUser) {
+        Optional<User> userOpt = userRepository.findByEmail(updatedUser.getEmail());
         if (userOpt.isPresent()) {
             User existingUser = userOpt.get();
             // Update fields
@@ -70,11 +78,41 @@ public class UserService {
             existingUser.setLastName(updatedUser.getLastName());
             existingUser.setEmail(updatedUser.getEmail());
 
+            // Update student association if provided
+            if (updatedUser.getId_student() != null) {
+                Student student = studentRepository.findById(updatedUser.getId_student())
+                        .orElseThrow(() -> new RuntimeException("Student not found with id: " + updatedUser.getId_student()));
+                existingUser.setStudent(student);
+            }
+
             // Save updated user
             User savedUser = userRepository.save(existingUser);
             return convertToUserResponse(savedUser);
         } else {
-            throw new RuntimeException("User not found with id: " + id);
+            throw new AppException(ErrorCode.USER_NOT_FOUND);
+        }
+    }
+
+    @Transactional
+    public UserResponse updateOnlyUser(OnlyUpdateUserRequest onlyUpdateUserRequest){
+        Optional<User> userOptional = userRepository.findByEmail(onlyUpdateUserRequest.getEmail());
+        if (userOptional.isPresent()) {
+            User existingUser = userOptional.get();
+
+            if (onlyUpdateUserRequest.getId_student() != null) {
+                Optional<Student> studentOpt = studentRepository.findById(onlyUpdateUserRequest.getId_student());
+                if (studentOpt.isPresent()) {
+                    Student student = studentOpt.get();
+                    existingUser.setStudent(student);
+                } else {
+                    throw new RuntimeException("Student not found!");
+                }
+            }
+
+            User savedUser = userRepository.save(existingUser);
+            return convertToUserResponse(savedUser);
+        }else{
+            throw new AppException(ErrorCode.USER_NOT_FOUND);
         }
     }
 
@@ -97,6 +135,7 @@ public class UserService {
                 .lastName(user.getLastName())
                 .email(user.getEmail())
                 .password(user.getPassword())
+                .id_student(user.getStudent().getId_student())
                 .role(user.getRole())
                 .build();
     }

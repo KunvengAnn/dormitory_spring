@@ -1,15 +1,14 @@
 package com.example.dormitoryspring.services;
 
+import com.example.dormitoryspring.dto.request.IntrospectRequest;
 import com.example.dormitoryspring.dto.request.UserRequest;
 import com.example.dormitoryspring.dto.request.RefreshRequest;
-import com.example.dormitoryspring.dto.response.LoginResponse;
-import com.example.dormitoryspring.dto.response.UserResponse;
-import com.example.dormitoryspring.dto.response.RefreshResponse;
-import com.example.dormitoryspring.dto.response.RegisterResponse;
+import com.example.dormitoryspring.dto.response.*;
 import com.example.dormitoryspring.entity.InvalidatedToken;
 import com.example.dormitoryspring.entity.User;
 import com.example.dormitoryspring.enums.Role;
 import com.example.dormitoryspring.exception.AppException;
+import com.example.dormitoryspring.exception.ErrorCode;
 import com.example.dormitoryspring.repositories.InvalidatedTokenRepository;
 import com.example.dormitoryspring.repositories.UserRepository;
 import com.nimbusds.jose.*;
@@ -30,6 +29,7 @@ import java.text.ParseException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -55,7 +55,7 @@ public class AuthService {
 
     public RegisterResponse register(UserRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new AppException("User already exists");
+            throw new AppException(ErrorCode.USER_EXISTED);
         }
 
         User user = User.builder()
@@ -78,21 +78,43 @@ public class AuthService {
                 .build();
     }
 
+    public Optional<LoginResponse> getCurrentUserLogin(String email){
+            Optional<User> userOPT = userRepository.findByEmail(email);
+        if (userOPT.isEmpty()) {
+            throw new AppException(ErrorCode.USER_NOT_FOUND);
+        }
+        User user = userOPT.get();
+        LoginResponse loginResponse = LoginResponse.builder()
+                .id_user(user.getId())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .email(user.getEmail())
+                .password(user.getPassword())
+                .id_student(user.getStudent() != null ? user.getStudent().getId_student() : null)
+                .role(user.getRole())
+                .build();
+        return Optional.of(loginResponse);
+    }
+
+
     public LoginResponse login(UserRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new AppException("User not found"));
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new AppException("Invalid credentials");
+            throw new AppException(ErrorCode.INVALID_PASSWORD);
         }
 
         String accessToken = generateToken(user);
 
-        // Build the response DTO
         return LoginResponse.builder()
+                .id_user(user.getId())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .email(user.getEmail())
+                .password(user.getPassword())
+                // Check if user.getStudent() is not null and set id_student if it's available
+                .id_student(user.getStudent() != null ? user.getStudent().getId_student() : null)
                 .role(user.getRole())
                 .token(accessToken)
                 .build();
@@ -100,7 +122,7 @@ public class AuthService {
 
     public void logout(String token) throws ParseException, JOSEException {
         try {
-            SignedJWT signedJWT = verifyToken(token, false);
+            SignedJWT signedJWT = verifyToken(token);
 
             String jwtId = signedJWT.getJWTClaimsSet().getJWTID();
             Date expiryTime = signedJWT.getJWTClaimsSet().getExpirationTime();
@@ -113,14 +135,34 @@ public class AuthService {
             invalidatedTokenRepository.save(invalidatedToken);
         } catch (AppException ex) {
             log.info("Token already expired or invalid: {}", ex.getMessage());
-            throw new AppException(ex.getMessage());
+            throw new AppException(ex.getErrorCode());
+        } catch (Exception ex) {
+            // Catch any unexpected exceptions
+            log.error("Unexpected error during logout: {}", ex.getMessage());
+            throw new AppException(ErrorCode.UNCATEGORIZED_EXCEPTION, ex);
         }
     }
 
+    // this for check token valid or not (correct=true ; false = incorrect)
+    public IntrospectResponse introspect(IntrospectRequest request)
+            throws JOSEException, ParseException {
+        var token = request.getToken();
+        boolean isValid = true;
+
+        try {
+            verifyToken(token);
+        } catch (AppException e) {
+            isValid = false;
+        }
+
+        return IntrospectResponse.builder()
+                .valid(isValid)
+                .build();
+    }
 
     public RefreshResponse refreshToken(RefreshRequest request) throws ParseException, JOSEException {
         // Verify the old token
-        SignedJWT signedJWT = verifyToken(request.getToken(), true);
+        SignedJWT signedJWT = verifyToken(request.getToken());
 
         // Get the JWT ID and expiry time from the old token
         String jwtId = signedJWT.getJWTClaimsSet().getJWTID();
@@ -136,7 +178,7 @@ public class AuthService {
         // Get user email from the old token
         String email = signedJWT.getJWTClaimsSet().getSubject();
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new AppException("User not found"));
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
         // Generate a new token
         String newToken = generateToken(user);
@@ -147,32 +189,24 @@ public class AuthService {
                 .build();
     }
 
-
-
-    private SignedJWT verifyToken(String token, boolean isRefresh) throws JOSEException, ParseException {
+    private SignedJWT verifyToken(String token) throws JOSEException, ParseException {
         JWSVerifier verifier = new MACVerifier(SIGNER_KEY.getBytes());
+
+        // Parse the token
         SignedJWT signedJWT = SignedJWT.parse(token);
 
-        // Verify the signature
-        boolean verified = signedJWT.verify(verifier);
-        if (!verified) {
-            throw new AppException("Invalid token signature");
-        }
-
+        // Retrieve and check the token's expiration time
         Date expiryTime = signedJWT.getJWTClaimsSet().getExpirationTime();
-        if (isRefresh) {
-            expiryTime = Date.from(signedJWT.getJWTClaimsSet().getIssueTime().toInstant()
-                    .plus(REFRESHABLE_DURATION, ChronoUnit.SECONDS));
+
+        // Verify the token's signature and check expiration
+        boolean verified = signedJWT.verify(verifier);
+        if (!(verified && expiryTime.after(new Date()))) {
+            throw new AppException(ErrorCode.UNAUTHENTICATED);
         }
 
-        // Check token expiration
-        if (expiryTime.before(new Date())) {
-            throw new AppException("Token expired");
-        }
-
-        // Check if the token is invalidated
+        // Check if the token has been invalidated
         if (invalidatedTokenRepository.existsById(signedJWT.getJWTClaimsSet().getJWTID())) {
-            throw new AppException("Token is invalidated");
+            throw new AppException(ErrorCode.UNAUTHENTICATED);
         }
 
         return signedJWT;

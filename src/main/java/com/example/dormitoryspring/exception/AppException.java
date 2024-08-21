@@ -1,12 +1,21 @@
 package com.example.dormitoryspring.exception;
 
+
 public class AppException extends RuntimeException {
 
-    public AppException(String message) {
-        super(message);
+    private final ErrorCode errorCode;
+
+    public AppException(ErrorCode errorCode) {
+        super(errorCode.getMessage());
+        this.errorCode = errorCode;
     }
 
-    public AppException(String message, Throwable cause) {
-        super(message, cause);
+    public AppException(ErrorCode errorCode, Throwable cause) {
+        super(errorCode.getMessage(), cause);
+        this.errorCode = errorCode;
+    }
+
+    public ErrorCode getErrorCode() {
+        return errorCode;
     }
 }

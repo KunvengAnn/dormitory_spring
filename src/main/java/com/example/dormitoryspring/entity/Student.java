@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Set;
 
 @Getter
@@ -24,11 +25,16 @@ public class Student {
     @JsonFormat(pattern = "yyyy-MM-dd")
     private Date date_of_birth_student;
     private String student_class;
+    private String student_email;
     private String department_of_student;
     private String student_phone;
     private String citizenIdentification;
+    private String BirthPlace;
+    private String nationality;
+
+    private String descriptionAboutSelf;//optional
     private String student_imageUrl;
 
     @OneToMany(mappedBy = "student", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Set<Contract> contracts;
+    private Set<Contract> contracts = new HashSet<>();
 }

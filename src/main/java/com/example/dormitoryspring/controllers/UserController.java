@@ -1,5 +1,7 @@
 package com.example.dormitoryspring.controllers;
 
+import com.example.dormitoryspring.dto.request.OnlyUpdateUserRequest;
+import com.example.dormitoryspring.dto.request.UserRequest;
 import com.example.dormitoryspring.dto.response.UserResponse;
 import com.example.dormitoryspring.exception.AppException;
 import com.example.dormitoryspring.services.UserService;
@@ -8,9 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.ErrorResponse;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -34,4 +34,31 @@ public class UserController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
         }
     }
+
+    @PutMapping("/user-update")
+    public ResponseEntity<?> updateUser(@RequestBody UserRequest userRequest) {
+        try {
+            UserResponse userResponse = userService.updateUser(userRequest);
+            return ResponseEntity.ok(userResponse);
+        }catch (AppException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        }catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
+        }
+    }
+
+    //
+    @PutMapping("/user-update-id-student")
+    public ResponseEntity<?> updateUserWithIdStudent(@RequestBody OnlyUpdateUserRequest onlyUpdateUserRequest){
+        try {
+            UserResponse updatedUserResponse = userService.updateOnlyUser(onlyUpdateUserRequest);
+            return ResponseEntity.ok(updatedUserResponse);
+        }catch (AppException e) {
+            log.error(e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        }catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
+        }
+    }
+
 }

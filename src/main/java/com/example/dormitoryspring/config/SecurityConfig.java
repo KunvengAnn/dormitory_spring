@@ -31,7 +31,8 @@ public class SecurityConfig {
         http
                 .csrf().disable() // disable spring security
                 .authorizeRequests()
-                .requestMatchers("/auth/**").permitAll()  // Allow unauthenticated access to registration and login endpoints
+                .requestMatchers("/auth/**").permitAll()  // Allow permission
+                .requestMatchers("/images/**").permitAll()
                 .anyRequest().authenticated()  // Secure all other endpoints
                 .and()
                 .oauth2ResourceServer(oauth2 -> oauth2

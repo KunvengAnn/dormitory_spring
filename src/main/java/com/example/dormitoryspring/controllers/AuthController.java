@@ -1,9 +1,10 @@
 package com.example.dormitoryspring.controllers;
 
+import com.example.dormitoryspring.dto.request.InfoCurrentUserRequest;
+import com.example.dormitoryspring.dto.request.IntrospectRequest;
 import com.example.dormitoryspring.dto.request.RefreshRequest;
-import com.example.dormitoryspring.dto.response.LoginResponse;
-import com.example.dormitoryspring.dto.response.RefreshResponse;
-import com.example.dormitoryspring.dto.response.RegisterResponse;
+import com.example.dormitoryspring.dto.response.*;
+import com.example.dormitoryspring.entity.User;
 import com.example.dormitoryspring.exception.AppException;
 import com.nimbusds.jose.JOSEException;
 import jakarta.validation.Valid;
@@ -11,13 +12,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.RestController;
 import com.example.dormitoryspring.dto.request.UserRequest;
-import com.example.dormitoryspring.dto.response.UserResponse;
 import com.example.dormitoryspring.services.AuthService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.text.ParseException;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/auth")
@@ -33,7 +34,6 @@ public class AuthController {
             RegisterResponse registerResponse = authService.register(request);
             return ResponseEntity.ok(registerResponse);
         } catch (AppException e) {
-            // Return a bad request status with the error message
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("An error occurred: " + e.getMessage());
@@ -74,7 +74,35 @@ public class AuthController {
        catch (Exception e) {
            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("An unexpected error occurred."+e.getMessage());
        }
-
     }
+
+    @PostMapping("/getCurrentUser")
+    public ResponseEntity<?> getCurrentUser(@RequestBody InfoCurrentUserRequest infoCurrentUserRequest)  {
+        try {
+            log.error(infoCurrentUserRequest.getEmail());
+            log.debug("email"+infoCurrentUserRequest.getEmail());
+            Optional<LoginResponse> lgRes = authService.getCurrentUserLogin(infoCurrentUserRequest.getEmail());
+            return ResponseEntity.ok(lgRes);
+        }catch (AppException e){
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        }catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @PostMapping("/introspect")
+    public ResponseEntity<?> introspect(@RequestBody IntrospectRequest request) throws ParseException, JOSEException {
+        try
+        {
+            IntrospectResponse result = authService.introspect(request);
+
+            return ResponseEntity.ok(result);
+        }catch (AppException e){
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        }catch (Exception e){
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
 }
 

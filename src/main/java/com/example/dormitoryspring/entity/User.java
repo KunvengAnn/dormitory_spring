@@ -30,6 +30,10 @@ public class User {
     private String email;
     private String password;
 
+    @ManyToOne
+    @JoinColumn(name = "id_student", referencedColumnName = "id_student")
+    private Student student;
+
     @Enumerated(EnumType.STRING)
     private Role role;
 }
